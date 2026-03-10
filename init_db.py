@@ -46,6 +46,15 @@ def create_tables():
         );
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS scraper_runs (
+            id              SERIAL PRIMARY KEY,
+            ran_at          TIMESTAMPTZ DEFAULT NOW(),
+            status          TEXT,
+            listings_added  INTEGER
+        );
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
