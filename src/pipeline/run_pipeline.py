@@ -1,42 +1,20 @@
 import os
 import re
-import logging
-import logging.handlers
 import requests
 import psycopg2
 import pandas as pd
 from dotenv import load_dotenv
 import datetime
 from datetime import date
-
+from logger import get_logger  
 load_dotenv()
 
-# Logging setup
-logger = logging.getLogger("parislens")
-logger.setLevel(logging.INFO)
-
-formatter = logging.Formatter(
-    fmt="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-
-# Log to console
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-
-# Log to file (max 5MB per file, keep last 3 files)
-file_handler = logging.handlers.RotatingFileHandler(
-    "pipeline.log", maxBytes=5 * 1024 * 1024, backupCount=3
-)
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
+logger = get_logger("parislens") 
 
 # Load to base de donnees and download data
 
 def download_and_load():
     logger.info("Downloading latest DVF data...")
-    # Our file gets updated yearly usually so it always tries current year, and falls back to previous year if it is not upldated yet
     current_year = datetime.date.today().year
     url = f"https://files.data.gouv.fr/geo-dvf/latest/csv/{current_year}/departements/75.csv.gz"
 
@@ -119,56 +97,70 @@ def bronze_to_silver():
     logger.info(f"Bronze to Silver: {len(rows)} unprocessed rows found")
 
     cleaned = 0
-    for row in rows:
-        id_, price_raw, surface_raw, arr = row
-        price = parse_price(price_raw)
-        surface = parse_surface(surface_raw)
+    try:
+        for row in rows:
+            id_, price_raw, surface_raw, arr = row
+            price = parse_price(price_raw)
+            surface = parse_surface(surface_raw)
 
-        if not price or not surface or surface == 0:
-            logger.warning(f"Skipping bronze id={id_}: could not parse price or surface")
+            if not price or not surface or surface == 0:
+                logger.warning(f"Skipping bronze id={id_}: could not parse price or surface")
+                cur.execute("UPDATE bronze_listings SET processed=TRUE WHERE id=%s", (id_,))
+                continue
+
+            price_per_m2 = round(price / surface, 2)
+            cur.execute("""
+                INSERT INTO silver_listings
+                  (bronze_id, price_eur, surface_m2, price_per_m2, arrondissement, scraped_at)
+                VALUES (%s, %s, %s, %s, %s, NOW())
+            """, (id_, price, surface, price_per_m2, arr))
             cur.execute("UPDATE bronze_listings SET processed=TRUE WHERE id=%s", (id_,))
-            continue
+            cleaned += 1
 
-        price_per_m2 = round(price / surface, 2)
-        cur.execute("""
-            INSERT INTO silver_listings
-              (bronze_id, price_eur, surface_m2, price_per_m2, arrondissement, scraped_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
-        """, (id_, price, surface, price_per_m2, arr))
-        cur.execute("UPDATE bronze_listings SET processed=TRUE WHERE id=%s", (id_,))
-        cleaned += 1
+        conn.commit()
+        logger.info(f"Silver: {cleaned} rows cleaned and inserted")
 
-    conn.commit()
-    cur.close()
-    conn.close()
-    logger.info(f"Silver: {cleaned} rows cleaned and inserted")
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"bronze_to_silver failed: {e}", exc_info=True)
+        raise
+    finally:
+        cur.close()
+        conn.close()
 
 
 def silver_to_gold():
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
     cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO gold_daily_stats (arrondissement, date, avg_price_per_m2, listing_count)
-        SELECT
-            arrondissement,
-            CURRENT_DATE,
-            ROUND(AVG(price_per_m2)::numeric, 2),
-            COUNT(*)
-        FROM silver_listings
-        GROUP BY arrondissement
-        ON CONFLICT (arrondissement, date) DO UPDATE
-          SET avg_price_per_m2 = EXCLUDED.avg_price_per_m2,
-              listing_count = EXCLUDED.listing_count,
-              computed_at = NOW()
-    """)
-    cur.execute("""
-        INSERT INTO scraper_runs (status, listings_added)
-        VALUES ('success', (SELECT COUNT(*) FROM bronze_listings WHERE scraped_at::date = CURRENT_DATE))
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
-    logger.info(f"Gold: daily stats updated for {date.today()}")
+    try:
+        cur.execute("""
+            INSERT INTO gold_daily_stats (arrondissement, date, avg_price_per_m2, listing_count)
+            SELECT
+                arrondissement,
+                CURRENT_DATE,
+                ROUND(AVG(price_per_m2)::numeric, 2),
+                COUNT(*)
+            FROM silver_listings
+            GROUP BY arrondissement
+            ON CONFLICT (arrondissement, date) DO UPDATE
+              SET avg_price_per_m2 = EXCLUDED.avg_price_per_m2,
+                  listing_count = EXCLUDED.listing_count,
+                  computed_at = NOW()
+        """)
+        cur.execute("""
+            INSERT INTO scraper_runs (status, listings_added)
+            VALUES ('success', (SELECT COUNT(*) FROM bronze_listings WHERE scraped_at::date = CURRENT_DATE))
+        """)
+        conn.commit()
+        logger.info(f"Gold: daily stats updated for {date.today()}")
+
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"silver_to_gold failed: {e}", exc_info=True)
+        raise
+    finally:
+        cur.close()
+        conn.close()
 
 
 if __name__ == "__main__":
