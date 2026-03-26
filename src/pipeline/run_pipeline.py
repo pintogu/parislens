@@ -27,6 +27,13 @@ def download_and_load():
         response = requests.get(url, timeout=60)
 
     response.raise_for_status()
+    # Save the file to disk
+    with open("paris_transactions.csv.gz", "wb") as f:
+        f.write(response.content)
+
+    logger.info(f"DVF file downloaded successfully (year: {url.split('/')[7]})")
+
+    df = pd.read_csv("paris_transactions.csv.gz", compression="gzip", low_memory=False)
     logger.info(f"DVF file downloaded successfully (year: {url.split('/')[7]})")
 
     df = pd.read_csv("paris_transactions.csv.gz", compression="gzip", low_memory=False)
