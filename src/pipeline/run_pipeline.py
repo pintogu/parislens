@@ -1,21 +1,59 @@
 import os
+import re
+import logging
+import logging.handlers
+import requests
 import psycopg2
 import pandas as pd
 from dotenv import load_dotenv
+import datetime
 from datetime import date
 
 load_dotenv()
 
+# Logging setup
+logger = logging.getLogger("parislens")
+logger.setLevel(logging.INFO)
+
+formatter = logging.Formatter(
+    fmt="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+# Log to console
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# Log to file (max 5MB per file, keep last 3 files)
+file_handler = logging.handlers.RotatingFileHandler(
+    "pipeline.log", maxBytes=5 * 1024 * 1024, backupCount=3
+)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+# Load to base de donnees and download data
+
 def download_and_load():
-    import requests
-    print("📥 Downloading latest DVF data...")
-    url = "https://files.data.gouv.fr/geo-dvf/latest/csv/2024/departements/75.csv.gz"
-    response = requests.get(url)
-    with open("paris_transactions.csv.gz", "wb") as f:
-        f.write(response.content)
-    print("✅ Downloaded")
+    logger.info("Downloading latest DVF data...")
+    # Our file gets updated yearly usually so it always tries current year, and falls back to previous year if it is not upldated yet
+    current_year = datetime.date.today().year
+    url = f"https://files.data.gouv.fr/geo-dvf/latest/csv/{current_year}/departements/75.csv.gz"
+
+    response = requests.get(url, timeout=60)
+
+    if response.status_code == 404:
+        fallback_year = current_year - 1
+        logger.warning(f"No data found for {current_year}, falling back to {fallback_year}")
+        url = f"https://files.data.gouv.fr/geo-dvf/latest/csv/{fallback_year}/departements/75.csv.gz"
+        response = requests.get(url, timeout=60)
+
+    response.raise_for_status()
+    logger.info(f"DVF file downloaded successfully (year: {url.split('/')[7]})")
 
     df = pd.read_csv("paris_transactions.csv.gz", compression="gzip", low_memory=False)
+    logger.info(f"Loaded {len(df)} raw rows from CSV")
+
     df = df[df["type_local"] == "Appartement"]
     df = df[df["nature_mutation"] == "Vente"]
     df = df.dropna(subset=["valeur_fonciere", "surface_reelle_bati", "code_postal"])
@@ -26,10 +64,12 @@ def download_and_load():
     df = df[df["surface_reelle_bati"] <= 500]
     df = df[df["price_per_m2"] >= 3000]
     df = df[df["price_per_m2"] <= 40000]
+    logger.info(f"{len(df)} rows remaining after filtering")
 
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
     cur = conn.cursor()
     saved = 0
+
     for _, row in df.iterrows():
         try:
             arrondissement = str(int(row["code_postal"]))
@@ -39,27 +79,35 @@ def download_and_load():
                   (title, price_raw, surface_raw, arrondissement, url, scraped_at)
                 VALUES (%s, %s, %s, %s, %s, %s::date)
                 ON CONFLICT (url) DO NOTHING
-            """, (f"Appartement {arrondissement}",
-                  str(int(row["valeur_fonciere"])) + " €",
-                  str(row["surface_reelle_bati"]) + " m²",
-                  arrondissement, url_key, row["date_mutation"]))
+            """, (
+                f"Appartement {arrondissement}",
+                str(int(row["valeur_fonciere"])) + " €",
+                str(row["surface_reelle_bati"]) + " m²",
+                arrondissement,
+                url_key,
+                row["date_mutation"]
+            ))
             if cur.rowcount > 0:
                 saved += 1
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Skipping row {row.get('id_mutation')}: {e}")
+
         if saved % 2000 == 0 and saved > 0:
             conn.commit()
+            logger.info(f"{saved} rows committed so far...")
+
     conn.commit()
     cur.close()
     conn.close()
-    print(f"✅ Bronze: {saved} new rows loaded")
+    logger.info(f"Bronze: {saved} new rows loaded")
     return saved
 
+
 def bronze_to_silver():
-    import re
     def parse_price(raw):
         digits = re.sub(r"[^\d]", "", raw or "")
         return int(digits) if digits else None
+
     def parse_surface(raw):
         match = re.search(r"([\d,\.]+)\s*m", raw or "")
         return float(match.group(1).replace(",", ".")) if match else None
@@ -68,14 +116,19 @@ def bronze_to_silver():
     cur = conn.cursor()
     cur.execute("SELECT id, price_raw, surface_raw, arrondissement FROM bronze_listings WHERE processed = FALSE")
     rows = cur.fetchall()
+    logger.info(f"Bronze to Silver: {len(rows)} unprocessed rows found")
+
     cleaned = 0
     for row in rows:
         id_, price_raw, surface_raw, arr = row
         price = parse_price(price_raw)
         surface = parse_surface(surface_raw)
+
         if not price or not surface or surface == 0:
+            logger.warning(f"Skipping bronze id={id_}: could not parse price or surface")
             cur.execute("UPDATE bronze_listings SET processed=TRUE WHERE id=%s", (id_,))
             continue
+
         price_per_m2 = round(price / surface, 2)
         cur.execute("""
             INSERT INTO silver_listings
@@ -84,10 +137,12 @@ def bronze_to_silver():
         """, (id_, price, surface, price_per_m2, arr))
         cur.execute("UPDATE bronze_listings SET processed=TRUE WHERE id=%s", (id_,))
         cleaned += 1
+
     conn.commit()
     cur.close()
     conn.close()
-    print(f"✅ Silver: {cleaned} rows cleaned")
+    logger.info(f"Silver: {cleaned} rows cleaned and inserted")
+
 
 def silver_to_gold():
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
@@ -106,7 +161,6 @@ def silver_to_gold():
               listing_count = EXCLUDED.listing_count,
               computed_at = NOW()
     """)
-    # Log this run
     cur.execute("""
         INSERT INTO scraper_runs (status, listings_added)
         VALUES ('success', (SELECT COUNT(*) FROM bronze_listings WHERE scraped_at::date = CURRENT_DATE))
@@ -114,21 +168,24 @@ def silver_to_gold():
     conn.commit()
     cur.close()
     conn.close()
-    print(f"✅ Gold: updated for {date.today()}")
+    logger.info(f"Gold: daily stats updated for {date.today()}")
+
 
 if __name__ == "__main__":
-    print(f"\n🚀 Pipeline starting — {date.today()}\n")
+    logger.info(f"Pipeline starting — {date.today()}")
     try:
         download_and_load()
         bronze_to_silver()
         silver_to_gold()
-        print("\n🎉 Pipeline complete!\n")
+        logger.info("Pipeline complete")
     except Exception as e:
-        # Log failure
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        cur = conn.cursor()
-        cur.execute("INSERT INTO scraper_runs (status, listings_added) VALUES ('failed', 0)")
-        conn.commit()
-        conn.close()
-        print(f"\n❌ Pipeline failed: {e}\n")
+        logger.error(f"Pipeline failed: {e}", exc_info=True)
+        try:
+            conn = psycopg2.connect(os.environ["DATABASE_URL"])
+            cur = conn.cursor()
+            cur.execute("INSERT INTO scraper_runs (status, listings_added) VALUES ('failed', 0)")
+            conn.commit()
+            conn.close()
+        except Exception as db_error:
+            logger.error(f"Also failed to log failure to DB: {db_error}")
         raise
