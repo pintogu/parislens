@@ -1,16 +1,21 @@
+# NOTE: This scraper was the original data collection approach, targeting PAP.fr.
+# It was abandoned because PAP.fr and SeLoger use Cloudflare bot protection,
+# which blocks automated browser access even with Playwright and realistic headers.
+# The pipeline now uses the official DVF dataset from data.gouv.fr instead.
+# This file is kept for reference but is NOT part of the active pipeline.
+
 import asyncio
-import logging
 import os
 import random
 
 import psycopg2
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
+from logger import get_logger
 
 load_dotenv()
+logger = get_logger(__name__)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger(__name__)
 
 ARRONDISSEMENT_URLS = {
     "75001": "https://www.pap.fr/annonce/vente-appartements-paris-1er-75001-g37680",
