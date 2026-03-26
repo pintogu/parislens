@@ -18,4 +18,4 @@ RUN chmod 0644 /etc/cron.d/parislens-cron
 RUN crontab /etc/cron.d/parislens-cron
 
 # Create tables first, then start cron in foreground
-CMD ["sh", "-c", "python src/pipeline/init_db.py && python src/pipeline/run_pipeline.py && cron -f"]
+CMD ["sh", "-c", "python src/database/init_db.py && python src/pipeline/run_pipeline.py && cron -f"]
