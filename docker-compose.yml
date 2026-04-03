@@ -22,7 +22,9 @@ services:
         condition: service_healthy
     volumes:
       - pipeline_logs:/app  
+      - model_artifacts:/app/model_artifacts
 
 volumes:
   pg_data:
-  pipeline_logs:  
+  pipeline_logs:
+  model_artifacts:  

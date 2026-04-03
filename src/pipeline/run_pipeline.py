@@ -61,14 +61,17 @@ def download_and_load():
             url_key = f"dvf-{row['id_mutation']}-{arrondissement}"
             cur.execute("""
                 INSERT INTO bronze_listings
-                  (title, price_raw, surface_raw, arrondissement, url, scraped_at)
-                VALUES (%s, %s, %s, %s, %s, %s::date)
+                  (title, price_raw, surface_raw, arrondissement, rooms_raw, longitude_raw, latitude_raw, url, scraped_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::date)
                 ON CONFLICT (url) DO NOTHING
             """, (
                 f"Appartement {arrondissement}",
                 str(int(row["valeur_fonciere"])) + " €",
                 str(row["surface_reelle_bati"]) + " m²",
                 arrondissement,
+                str(row["nombre_pieces_principales"]) if pd.notna(row["nombre_pieces_principales"]) else None,
+                str(row["longitude"]) if pd.notna(row["longitude"]) else None,
+                str(row["latitude"]) if pd.notna(row["latitude"]) else None,
                 url_key,
                 row["date_mutation"]
             ))
@@ -96,31 +99,45 @@ def bronze_to_silver():
     def parse_surface(raw):
         match = re.search(r"([\d,\.]+)\s*m", raw or "")
         return float(match.group(1).replace(",", ".")) if match else None
+    
+    def parse_rooms(raw):
+        try:
+            val = float(raw)
+            # enforce integer-like values only
+            if not val.is_integer():
+                return None
+            return int(val)
+        except (ValueError, TypeError):
+            return None
 
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
     cur = conn.cursor()
-    cur.execute("SELECT id, price_raw, surface_raw, arrondissement FROM bronze_listings WHERE processed = FALSE")
+    cur.execute("SELECT id, price_raw, surface_raw, arrondissement, rooms_raw, longitude_raw, latitude_raw FROM bronze_listings WHERE processed = FALSE")
     rows = cur.fetchall()
     logger.info(f"Bronze to Silver: {len(rows)} unprocessed rows found")
 
     cleaned = 0
     try:
         for row in rows:
-            id_, price_raw, surface_raw, arr = row
+            id_, price_raw, surface_raw, arr, rooms_raw, longitude_raw, latitude_raw = row
             price = parse_price(price_raw)
             surface = parse_surface(surface_raw)
+            rooms = parse_rooms(rooms_raw)
+            longitude = float(longitude_raw) if longitude_raw else None
+            latitude = float(latitude_raw) if latitude_raw else None
 
             if not price or not surface or surface == 0:
                 logger.warning(f"Skipping bronze id={id_}: could not parse price or surface")
                 cur.execute("UPDATE bronze_listings SET processed=TRUE WHERE id=%s", (id_,))
                 continue
 
+
             price_per_m2 = round(price / surface, 2)
             cur.execute("""
                 INSERT INTO silver_listings
-                  (bronze_id, price_eur, surface_m2, price_per_m2, arrondissement, scraped_at)
-                VALUES (%s, %s, %s, %s, %s, NOW())
-            """, (id_, price, surface, price_per_m2, arr))
+                  (bronze_id, price_eur, surface_m2, price_per_m2, arrondissement, rooms, longitude, latitude, scraped_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            """, (id_, price, surface, price_per_m2, arr, rooms, longitude, latitude))
             cur.execute("UPDATE bronze_listings SET processed=TRUE WHERE id=%s", (id_,))
             cleaned += 1
 

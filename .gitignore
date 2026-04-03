@@ -16,3 +16,6 @@ venv/
 
 # Logs
 *.log
+
+# Others
+.DS_Store

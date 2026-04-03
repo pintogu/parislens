@@ -162,6 +162,76 @@ psql postgresql://admin:password@localhost:5432/parislens
 
 ---
 
-*Section 2 — Price Prediction Model (coming)*
+## Section 2 — Price Prediction Model
+
+### 2.1. Data used
+For the price prediction modeling, we decided to use the silver dataset, as it had the cleanest features by listing. 
+
+
+### 2.2. Model selection
+As the modeling part is not the core of this project, we decided to try out two models (a simple Ridge regression and a LightGBM) and keep the one with better RMSE, which resulted to be the LightGBM one.
+
+| Model    | RMSE   | Std Dev   |
+|----------|--------|-----------|
+| Ridge    | 0.3683 | ± 0.0101  |
+| LightGBM | 0.2821 | ± 0.0090  |
+
+## 2.3. Model requirements
+Once we had a model, we had to figure out how to make it available for the API to consume in the next step. To do so, we created a train_model.py module that runs the model, evaluates it and then saves it as a joblib artifact, so the API endpoint that we create in the next step can access it and get a prediction, by providing the necessary features.
+
+#### **Required Features**
+- `surface_m2`  
+- `rooms`  
+- `longitude`  
+- `latitude`  
+- `arrondissement`  
+
+#### **Optional Features**
+If they are not provided, the current date will be extracted:
+- `month`  
+- `year`  
+
+#### **Output**
+- The model returns the **log of the price**
+- To make it readable:
+
+```python
+price = exp(prediction)
+```
+
+#### **Artifact location**
+
+```python
+/app/model_artifacts/lgb_model_latest.joblib
+```
+
+## 2.4. Retraining pipeline
+To make it more similar as to how it should work in a production environment, we decided to create a pipeline that generates the model artifact instead of just creating a model once. This pipeline has a cron job just like the data extraction one, but it runs once monthly. That way we get an updated version of the model in case the data has also been updated. 
+
+### Current Behavior
+- Evaluation metrics are printed
+- Logs are saved in the database to review the metrics generated for the retrained versions of the model
+
+### Future Work
+- Add a layer that monitors the metrics and decides whether or not the new model is worth deploying, so as to not degrade performance unknowingly
+- Trigger alerts in case:
+  - performance degrades too much
+  - the data used by the model from more recent periods is too different from the oldest one
+- Decide whether it would be better to use a certain window of data to train and monitor drift
+
+### 2.5. How to run
+
+Just like with the data extraction pipeline, now we have a new command in the Dockerfile that trigger the training. So the same commands apply:
+
+**Start the full stack:**
+```bash
+docker-compose up --build
+```
+After the data extraction, it runs the pipeline once immediately, and then hands off to cron.
+
+**Run the pipeline manually:**
+```bash
+python src/model/train_model.py
+```
 
 *Section 3 — API (coming)*

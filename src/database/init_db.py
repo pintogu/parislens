@@ -17,6 +17,9 @@ def create_tables():
                 price_raw   TEXT,
                 surface_raw TEXT,
                 arrondissement TEXT,
+                rooms_raw       TEXT,
+                longitude_raw   TEXT,
+                latitude_raw    TEXT,
                 url         TEXT UNIQUE,
                 scraped_at  TIMESTAMPTZ DEFAULT NOW(),
                 processed   BOOLEAN DEFAULT FALSE
@@ -28,9 +31,11 @@ def create_tables():
                 bronze_id      INTEGER REFERENCES bronze_listings(id),
                 price_eur      INTEGER,
                 surface_m2     FLOAT,
-                rooms          INTEGER,
                 price_per_m2   FLOAT,
                 arrondissement TEXT,
+                rooms          INTEGER,
+                longitude      FLOAT,
+                latitude       FLOAT,
                 scraped_at     TIMESTAMPTZ
             );
         """)
@@ -51,6 +56,19 @@ def create_tables():
                 ran_at          TIMESTAMPTZ DEFAULT NOW(),
                 status          TEXT,
                 listings_added  INTEGER
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS model_runs (
+                id              SERIAL PRIMARY KEY,
+                ran_at          TIMESTAMPTZ DEFAULT NOW(),
+                status          TEXT DEFAULT 'running',
+                model_path      TEXT,
+                cv_rmse         FLOAT,
+                train_rmse      FLOAT,
+                train_mae       FLOAT,
+                train_r2        FLOAT,
+                rows_used       INTEGER
             );
         """)
         conn.commit()
