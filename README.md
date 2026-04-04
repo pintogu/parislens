@@ -234,4 +234,51 @@ After the data extraction, it runs the pipeline once immediately, and then hands
 python src/model/train_model.py
 ```
 
-*Section 3 — API (coming)*
+## Section 3 - API 
+
+### 3.1 Endpoints
+The API exposes three endpoints: 
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Returns whether the API and model are operational |
+| `/estimate` | POST | Takes an apartment profile and returns a predicted price in euros |
+| `/arrondissements` | GET | Returns the list of Paris arrondissements covered |
+
+### 3.2 Design decisions 
+
+The API runs in its own container, separate from the pipeline and the model training. This ensures any part of the system can be restarted or updated independently. Model can be retrained without touching the API, and the API can be redeployed without re-running the pipeline. 
+
+The model is loaded once when the API starts rather than on every request. Reloading it on each call would add latency that compounds quickly under any real usage. 
+
+If the model file is missing at startup, for example because the pipeline has not run yet, the API still starts and returns a clear error on `/estimate` instead of refusing to start entirely. This way `/health` stays reachable and the dashboard can show "estimates currently unavailable" rather than going completely blank. 
+
+Longitude and latitude default to central Paris when not provided. Since arrondissement is always required and carries most of the location signal in the model, this has minimal impact on the estimate. A more precise improvement would be to default to the center of the given arrondissement rather than a single central point. 
+
+Logging follows the same approach as the pipeline: the Python's built-in logging module with timestamps on every request. 
+
+The `/arrondissements` endpoint currently returns a static list. A future version could fetch from "gold_daily_stats" directly to return live average prices per arrondissement, which would make it genuinely useful for the dashboard rather than just a reference list. 
+
+### 3.3 Testing
+
+We check three things: that `/health` responds and confirms the API is reachable, that `/estimate` returns a clear error when the model is not available rather than crashing, and that `/arrondissements` returns exactly 20 arrondissements and not more or less. Tests run automatically on every push via GitHub Actions. 
+
+### 3.4 Known limitations
+
+- No authentication or rate limiting. Anyone can call the API and there is nothing stopping a caller from sending unlimited requests. In production this would be a cost and a reliability concern and thus both would need to be addressed before any public deployment. 
+- The model file must be present at startup. If the pipeline has not run yet, `/estimate` will be unavailable until the model is generated. 
+- The `/arrondissements` endpoint does not yet connect to the database, as live arrondissement stats are out of scope for this component. 
+
+### 3.5 How to run 
+
+**Start the full stack:**
+```bash
+docker-compose up --build
+```
+This starts the API after the pipeline has run and the model is available. 
+The API loads the model on startup and begins accepting requests at http://localhost:8000. 
+Interactive documentation is available at http://localhost:8000/docs.
+
+**Run the API manually:**
+```bash
+uvicorn src.api.run_api:app --reload
+```

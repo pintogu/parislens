@@ -24,6 +24,23 @@ services:
       - pipeline_logs:/app  
       - model_artifacts:/app/model_artifacts
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      MODEL_PATH: /app/model_artifacts/lgb_model_latest.joblib
+    ports:
+      - "8000:8000"
+    volumes:
+      - model_artifacts:/app/model_artifacts
+    depends_on:
+      - pipeline
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      retries: 10
+
 volumes:
   pg_data:
   pipeline_logs:
