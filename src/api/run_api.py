@@ -86,7 +86,7 @@ def estimate(req: EstimateRequest):
 
 @app.get("/arrondissements")
 def arrondissements():
-    # Minimal implementation — a future version would query gold_daily_stats for live per-arrondissement averages
+    # Minimal implementation; a future version could fetch from gold_daily_stats for live per-arrondissement averages
     logger.info("Arrondissements endpoint called")
     return {
         "note": "Per-arrondissement stats are available in the gold_daily_stats table in Postgres",
