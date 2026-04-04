@@ -10,3 +10,5 @@ joblib
 fastapi
 uvicorn
 pydantic
+streamlit
+psycopg2 
