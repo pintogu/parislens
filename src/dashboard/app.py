@@ -23,7 +23,7 @@ st.header("Scraper Health")
 def get_scraper_logs():
     db_url = os.environ.get("DATABASE_URL")
     conn = psycopg2.connect(db_url)
-    df = pd.read_sql("SELECT * FROM scraper_runs ORDER BY start_time DESC LIMIT 10", conn)
+    df = pd.read_sql("SELECT * FROM scraper_runs LIMIT 5", conn)
     conn.close()
     return df
 try:
