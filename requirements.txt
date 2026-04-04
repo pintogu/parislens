@@ -7,3 +7,6 @@ lightgbm
 scikit-learn
 numpy
 joblib
+fastapi
+uvicorn
+pydantic
