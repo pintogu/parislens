@@ -282,3 +282,24 @@ Interactive documentation is available at http://localhost:8000/docs.
 ```bash
 uvicorn src.api.run_api:app --reload
 ```
+
+
+## Section 4 - Monitoring Dashboard 
+
+### 4.1 Overview
+The project now also includes a Streamlit dashboard that allows you to monitor the pipeline and the model running in 
+the backround. It automatically connects to the backend database (PostgreSQL) to verify scraper runs and pings the 
+'/health' endpoind of the API to check if it is responding succesfully. 
+
+### 4.2 How to run
+The dashboard is automatically started as part of our Docker Compose stack.
+
+**Start the full stack:**
+```bash
+docker-compose up --build
+```
+
+**Access the dashboard through your browser, by navigating to:**
+```
+http://localhost:8501
+```
