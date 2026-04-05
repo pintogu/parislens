@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install fastapi uvicorn httpx pydantic joblib numpy pytest
+        run: pip install -r requirements.txt pytest-mock
 
       - name: Run tests
         run: PYTHONPATH=. pytest tests/test_api.py -v

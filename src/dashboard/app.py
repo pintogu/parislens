@@ -4,7 +4,6 @@ import psycopg2
 import pandas as pd
 import os
 from datetime import datetime, timedelta
-import plotly.graph_objects as go
 st.set_page_config(page_title="ParisLens Dashboard", layout="wide")
 st.title("ParisLens Monitoring Dashboard")
 
@@ -102,60 +101,18 @@ if df_stats is not None and len(df_stats) > 0:
         # average prime per m square by date and arrondisment
         st.subheader("Average Price per m² by Arrondissement")
         
+        chart_price = st.line_chart()
         pivot_price = df_filtered.pivot(index="date", columns="arrondissement", values="avg_price_per_m2")
         if len(pivot_price) > 0:
-            fig_price = go.Figure()
-            for arrondissement in pivot_price.columns:
-                fig_price.add_trace(go.Scatter(
-                    x=pivot_price.index,
-                    y=pivot_price[arrondissement],
-                    mode='lines+markers',
-                    name=str(arrondissement),
-                    marker=dict(size=6)
-                ))
-            fig_price.update_layout(
-                xaxis_title="Date",
-                yaxis_title="Price per m² (€)",
-                hovermode='x unified',
-                height=500,
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=-0.25,
-                    xanchor="left",
-                    x=0
-                )
-            )
-            st.plotly_chart(fig_price, use_container_width=True)
+            chart_price.line_chart(pivot_price)
         
         # listing count
         st.subheader("Number of Listings by Arrondissement")
         
+        chart_listings = st.line_chart()
         pivot_listings = df_filtered.pivot(index="date", columns="arrondissement", values="listing_count")
         if len(pivot_listings) > 0:
-            fig_listings = go.Figure()
-            for arrondissement in pivot_listings.columns:
-                fig_listings.add_trace(go.Scatter(
-                    x=pivot_listings.index,
-                    y=pivot_listings[arrondissement],
-                    mode='lines+markers',
-                    name=str(arrondissement),
-                    marker=dict(size=6)
-                ))
-            fig_listings.update_layout(
-                xaxis_title="Date",
-                yaxis_title="Number of Listings",
-                hovermode='x unified',
-                height=500,
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=-0.25,
-                    xanchor="left",
-                    x=0
-                )
-            )
-            st.plotly_chart(fig_listings, use_container_width=True)
+            chart_listings.line_chart(pivot_listings)
         
         # summary statistics for date period and arronsissements selected
         st.subheader("Summary Statistics")
