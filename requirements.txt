@@ -11,4 +11,5 @@ fastapi
 uvicorn
 pydantic
 streamlit
-psycopg2-binary 
+plotly
+psycopg2-binary

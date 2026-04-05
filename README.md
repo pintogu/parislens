@@ -242,7 +242,7 @@ The API exposes three endpoints:
 |---|---|---|
 | `/health` | GET | Returns whether the API and model are operational |
 | `/estimate` | POST | Takes an apartment profile and returns a predicted price in euros |
-| `/arrondissements` | GET | Returns the list of Paris arrondissements covered |
+| `/arrondissements` | GET | Returns the gold daily dataset statistics |
 
 ### 3.2 Design decisions 
 
@@ -256,17 +256,17 @@ Longitude and latitude default to central Paris when not provided. Since arrondi
 
 Logging follows the same approach as the pipeline: the Python's built-in logging module with timestamps on every request. 
 
-The `/arrondissements` endpoint currently returns a static list. A future version could fetch from "gold_daily_stats" directly to return live average prices per arrondissement, which would make it genuinely useful for the dashboard rather than just a reference list. 
+The `/arrondissements` endpoint fetchs the data from "gold_daily_stats" directly to return live average prices per m² and number of listings per arrondissement per date.
 
 ### 3.3 Testing
 
-We check three things: that `/health` responds and confirms the API is reachable, that `/estimate` returns a clear error when the model is not available rather than crashing, and that `/arrondissements` returns exactly 20 arrondissements and not more or less. Tests run automatically on every push via GitHub Actions. 
+We check three things: that `/health` responds and confirms the API is reachable, that `/estimate` returns a clear error when the model is not available rather than crashing. Tests run automatically on every push via GitHub Actions. 
 
 ### 3.4 Known limitations
 
 - No authentication or rate limiting. Anyone can call the API and there is nothing stopping a caller from sending unlimited requests. In production this would be a cost and a reliability concern and thus both would need to be addressed before any public deployment. 
 - The model file must be present at startup. If the pipeline has not run yet, `/estimate` will be unavailable until the model is generated. 
-- The `/arrondissements` endpoint does not yet connect to the database, as live arrondissement stats are out of scope for this component. 
+
 
 ### 3.5 How to run 
 
@@ -303,3 +303,23 @@ docker-compose up --build
 ```
 http://localhost:8501
 ```
+
+### 4.3 What it shows
+
+#### **API health**
+Shows the result from the '/health' endpoint to check it the data was ingested successfully
+
+
+#### **Plots**
+1. Plot of average price per m² by arrondissement
+2. Plot of number of listings by arrondissement
+
+#### **Summary statistics**
+1. Total number of listings for all arrondissements in the date range (depending on the filters)
+2. Average price per m² for all arrondissements in the date range (depending on the filters)
+
+#### **Filters**
+The plots and summary statistics can be filtered by the filters shown in the left panel. These filters
+apply to all plots plus stats. The filters are:
+- Date range: we usually just had one day data so it was difficult to see how it would display with one month data
+- Arrondissement: it is possible to select which arrondissements we want to gather data from

@@ -30,6 +30,7 @@ services:
       dockerfile: Dockerfile.api
     environment:
       MODEL_PATH: /app/model_artifacts/lgb_model_latest.joblib
+      DATABASE_URL: postgresql://admin:password@postgres:5432/parislens
     ports:
       - "8000:8000"
     volumes:

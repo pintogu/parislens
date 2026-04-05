@@ -5,6 +5,8 @@ from datetime import datetime
 
 import joblib
 import numpy as np
+import psycopg2
+import psycopg2.extras
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -37,6 +39,15 @@ class EstimateResponse(BaseModel):
     estimated_price_per_m2: float
     arrondissement: int
     surface_m2: float
+
+class ArrondissementStats(BaseModel):
+    arrondissement: str
+    date: str
+    avg_price_per_m2: float
+    listing_count: int
+
+class ArrondissementsResponse(BaseModel):
+    stats: list[ArrondissementStats]
 
 @app.get("/health")
 def health():
@@ -86,9 +97,50 @@ def estimate(req: EstimateRequest):
 
 @app.get("/arrondissements")
 def arrondissements():
-    # Minimal implementation; a future version could fetch from gold_daily_stats for live per-arrondissement averages
     logger.info("Arrondissements endpoint called")
-    return {
-        "note": "Per-arrondissement stats are available in the gold_daily_stats table in Postgres",
-        "arrondissements": list(range(75001, 75021))
-    }
+    
+    try:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            logger.error("DATABASE_URL environment variable is not set")
+            raise HTTPException(status_code=503, detail="Database connection not configured")
+        
+        conn = psycopg2.connect(database_url)
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # fetch stats from gold daily table in db
+        cur.execute("""
+            SELECT 
+                arrondissement,
+                date,
+                avg_price_per_m2,
+                listing_count
+            FROM gold_daily_stats
+            ORDER BY date DESC, arrondissement ASC
+        """)
+        
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        if not rows:
+            logger.warning("No data found in gold_daily_stats table")
+            return ArrondissementsResponse(stats=[])
+        
+        # convert to response format
+        stats = [
+            ArrondissementStats(
+                arrondissement=row["arrondissement"],
+                date=row["date"].isoformat() if row["date"] else None,
+                avg_price_per_m2=float(row["avg_price_per_m2"]) if row["avg_price_per_m2"] else None,
+                listing_count=int(row["listing_count"]) if row["listing_count"] else 0
+            )
+            for row in rows
+        ]
+        
+        logger.info(f"Returning {len(stats)} arrondissement stats records")
+        return ArrondissementsResponse(stats=stats)
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch arrondissements stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch arrondissements data")

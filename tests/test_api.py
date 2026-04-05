@@ -18,10 +18,3 @@ def test_estimate_without_model_returns_503():
         "arrondissement": 11
     })
     assert response.status_code == 503
-
-def test_arrondissements_returns_all_20():
-    # Paris has exactly 20 arrondissements — this confirms we're not returning
-    # a partial or hardcoded subset
-    response = client.get("/arrondissements")
-    assert response.status_code == 200
-    assert len(response.json()["arrondissements"]) == 20
