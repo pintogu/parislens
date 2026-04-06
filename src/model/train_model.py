@@ -80,13 +80,8 @@ def remove_silver_duplicates(df_raw):
     if df.empty:
         return df
 
-    if "scraped_at" not in df.columns:
-        logger.warning("No scraped_at column found; skipping deduplication")
-        return df
-
     df["scraped_at"] = pd.to_datetime(df["scraped_at"], errors="coerce")
 
-    # keep latest record
     dedupe_columns = [
         "price_eur",
         "surface_m2",
@@ -98,7 +93,7 @@ def remove_silver_duplicates(df_raw):
     ]
 
     before_count = len(df)
-    df = df.sort_values("scraped_at", ascending=False, na_position="last")
+    df = df.sort_values("scraped_at", ascending=False, na_position="last") # keep the latest
     df = df.drop_duplicates(subset=dedupe_columns, keep="first").reset_index(drop=True)
     removed_count = before_count - len(df)
 
