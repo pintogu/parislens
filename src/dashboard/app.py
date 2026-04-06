@@ -136,7 +136,7 @@ except Exception as e:
 
 
     #check the scraper health: 
-st.header("Scraper Health *DISCONTINUED*")
+st.header("Ingestion Pipeline Runs")
 def get_scraper_logs():
     db_url = os.environ.get("DATABASE_URL")
     conn = psycopg2.connect(db_url)
