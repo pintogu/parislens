@@ -5,38 +5,31 @@ import pandas as pd
 import os
 from datetime import datetime, timedelta
 st.set_page_config(page_title="ParisLens Dashboard", layout="wide")
+#adding a backround image for fun 
+st.markdown(
+    """
+
+    <style>
+    .stApp {
+        background-image: url("https://images5.alphacoders.com/916/thumb-1920-916863.jpg");
+        background-attachment: fixed;
+        background-size: cover;
+    }
+    /* Let's optionally make the panels slightly transparent so we can see the background! */
+    .st-emotion-cache-1wmy9hl {
+        background-color: rgba(0,0,0,0.5);
+    }
+    /* white text because of the backround*/
+    h1, h2, h3, h4, h5, h6, p, span, div, label {
+        color: white !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 st.title("ParisLens Monitoring Dashboard")
-
-#chedck the API health 
-st.header("API STATUS") 
-try: 
-    res= requests.get("http://api:8000/health", timeout=10)
-    if res.status_code == 200: # if the API is healthy 
-        st.success("OK")
-    else: 
-        st.warning("API has some issues") 
-except Exception as e: 
-    st.error("Issue with API endpoint, cannot be reached") 
-         
-
-#check the scraper health: 
-st.header("Scraper Health")
-def get_scraper_logs():
-    db_url = os.environ.get("DATABASE_URL")
-    conn = psycopg2.connect(db_url)
-    df = pd.read_sql("SELECT * FROM scraper_runs LIMIT 5", conn)
-    conn.close()
-    return df
-try:
-    df_logs = get_scraper_logs()
-    st.dataframe(df_logs)
-except Exception as e:
-    st.error(f"Could not connect to database to fetch logs: {e}")
-
-
 # stats from arrondisments enpoint: general and plots
 st.header("Arrondissement Analytics")
-
 def fetch_arrondissement_stats():
     """Fetch stats from the API"""
     try:
@@ -129,3 +122,29 @@ if df_stats is not None and len(df_stats) > 0:
         st.warning("No data available for the selected filters")
 else:
     st.info("No arrondissement stats data available yet")
+
+#chedck the API health 
+st.header("API STATUS") 
+try: 
+    res= requests.get("http://api:8000/health", timeout=10)
+    if res.status_code == 200: # if the API is healthy 
+        st.success("OK")
+    else: 
+        st.warning("API has some issues") 
+except Exception as e: 
+    st.error("Issue with API endpoint, cannot be reached") 
+
+
+    #check the scraper health: 
+st.header("Scraper Health *DISCONTINUED*")
+def get_scraper_logs():
+    db_url = os.environ.get("DATABASE_URL")
+    conn = psycopg2.connect(db_url)
+    df = pd.read_sql("SELECT * FROM scraper_runs LIMIT 5", conn)
+    conn.close()
+    return df
+try:
+    df_logs = get_scraper_logs()
+    st.dataframe(df_logs)
+except Exception as e:
+    st.error(f"Could not connect to database to fetch logs: {e}")
