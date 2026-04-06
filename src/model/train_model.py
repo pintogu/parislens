@@ -74,6 +74,38 @@ def prepare_data(df_raw):
     return X, y
 
 
+def remove_silver_duplicates(df_raw):
+    df = df_raw.copy()
+
+    if df.empty:
+        return df
+
+    if "scraped_at" not in df.columns:
+        logger.warning("No scraped_at column found; skipping deduplication")
+        return df
+
+    df["scraped_at"] = pd.to_datetime(df["scraped_at"], errors="coerce")
+
+    # keep latest record
+    dedupe_columns = [
+        "price_eur",
+        "surface_m2",
+        "price_per_m2",
+        "arrondissement",
+        "rooms",
+        "longitude",
+        "latitude"
+    ]
+
+    before_count = len(df)
+    df = df.sort_values("scraped_at", ascending=False, na_position="last")
+    df = df.drop_duplicates(subset=dedupe_columns, keep="first").reset_index(drop=True)
+    removed_count = before_count - len(df)
+
+    logger.info(f"Deduplication removed {removed_count} rows from silver_listings")
+    return df
+
+
 def train_and_evaluate(model, X, y):
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     
@@ -177,6 +209,9 @@ def train_model():
         logger.info("Loading silver_listings from database...")
         df_silver = pd.read_sql("SELECT * FROM silver_listings;", engine)
         logger.info(f"Loaded {len(df_silver)} rows for training")
+
+        df_silver = remove_silver_duplicates(df_silver)
+        logger.info(f"{len(df_silver)} rows remaining after deduplication")
         
         if len(df_silver) < 100:
             logger.warning("Very few rows in silver_listings, training may not be stable")
