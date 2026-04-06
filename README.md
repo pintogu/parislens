@@ -267,8 +267,32 @@ We check three things: that `/health` responds and confirms the API is reachable
 - No authentication or rate limiting. Anyone can call the API and there is nothing stopping a caller from sending unlimited requests. In production this would be a cost and a reliability concern and thus both would need to be addressed before any public deployment. 
 - The model file must be present at startup. If the pipeline has not run yet, `/estimate` will be unavailable until the model is generated. 
 
+## Section 4 - Monitoring Dashboard 
 
-### 3.5 How to run 
+### 4.1 Overview
+The project now also includes a Streamlit dashboard that allows you to monitor the pipeline and the model running in 
+the backround. It automatically connects to the backend database (PostgreSQL) to verify scraper runs and pings the 
+'/health' endpoind of the API to check if it is responding succesfully. 
+
+### 4.2 How to run
+For simplicity of use, we created a start.sh script that starts the full stack and opens the dashboard automatically. 
+**To use it, simply give the script permission to run:**
+```bash
+chmod +x start.sh
+```
+**Then run the script:**
+```
+./start.sh
+```
+Explanation of the script:
+
+The `start.sh` script automates the entire setup process from scratch by executing the following steps in order:
+1. **Environment Setup:** Automatically duplicates the `.env.example` file into `.env` to securely set up your database credentials.
+2. **Container Orchestration:** Uses `docker-compose` to download, build, and run the Postgres database, API, Pipeline, and Dashboard in the background.
+3. **Initial Scrape:** Waits for the database to boot, then forces the pipeline to scrape today's data so the dashboard isn't empty.
+4. **Launch:** Automatically opens the Streamlit frontend in your default browser.
+
+### 4.3 Running manually 
 
 **Start the full stack:**
 ```bash
@@ -278,27 +302,6 @@ This starts the API after the pipeline has run and the model is available.
 The API loads the model on startup and begins accepting requests at http://localhost:8000. 
 Interactive documentation is available at http://localhost:8000/docs.
 
-**Run the API manually:**
-```bash
-uvicorn src.api.run_api:app --reload
-```
-
-
-## Section 4 - Monitoring Dashboard 
-
-### 4.1 Overview
-The project now also includes a Streamlit dashboard that allows you to monitor the pipeline and the model running in 
-the backround. It automatically connects to the backend database (PostgreSQL) to verify scraper runs and pings the 
-'/health' endpoind of the API to check if it is responding succesfully. 
-
-### 4.2 How to run
-The dashboard is automatically started as part of our Docker Compose stack.
-
-**Start the full stack:**
-```bash
-docker-compose up --build
-```
-
 **Access the dashboard through your browser, by navigating to:**
 ```
 http://localhost:8501
@@ -307,7 +310,7 @@ http://localhost:8501
 ### 4.3 What it shows
 
 #### **API health**
-Shows the result from the '/health' endpoint to check it the data was ingested successfully
+Shows the result from the '/health' endpoint to check it the data was ingested successfully 
 
 
 #### **Plots**
