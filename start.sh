@@ -11,14 +11,6 @@ fi
 echo "Initiating Docker containers...."
 docker-compose up --build -d 
 
-#Database must wake up first before the next scrape 
-echo "Timeout for the database to start..."
-sleep 7 
-
-#Initiate first scrape 
-echo "Initiating first scrape..."
-docker-compose exec pipeline python src/pipeline/run_pipeline.py
-
 #Open the dashboard;
 echo "Opening dashboard..."
 open http://localhost:8501 
