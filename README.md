@@ -84,9 +84,17 @@ without re downloading from the source.
 
 ### 1.6 Scheduling
 
-The process runs daily at 3:00 a.m. via a cron job within the Docker container.
-The dataset is updated infrequently (once a year, as far as we can tell), so the daily runs serve more to
-demonstrate the programming patterns than to collect new data.
+For local development, `docker-compose up --build` runs one-time jobs in sequence:
+1. schema initialization
+2. data pipeline
+3. model training
+
+The scheduler concern is kept outside the image. The same image can now run a single job (`init-db`, `pipeline`, or
+`train`) and an external scheduler decides when to trigger each one.
+
+For production-like scheduling, the repository includes a GitHub Actions workflow:
+- Daily ingestion at `03:00 UTC`
+- Monthly training at `04:00 UTC` on day 1
 
 Each run is logged in the `scraper_runs` table with its status
 and the number of rows added; this is the first place we would look if
@@ -94,13 +102,8 @@ something appears to be wrong.
 
 **Known limitations of this approach in production:**
 
-- If the job crashes, nothing sends an alert. You need to check
-  the logs or the `scraper_runs` table actively
-- If the container is down at 3am the run is simply skipped,
-  with no catch-up
-- The crontab lives inside the container so if the container is
-  rebuilt, the schedule resets. A dedicated scheduler like Airflow
-  or Prefect would be more robust at scale, but so far we do not think is needed
+- GitHub-hosted runners are ephemeral, so artifacts and logs should be pushed to durable storage
+- Workflow scheduling can drift by a few minutes and can be paused in inactive repositories
 
 ### 1.7 Logging
 
@@ -119,7 +122,7 @@ all scripts in the automation process share the same format and behaviour.
 docker-compose up --build
 ```
 This starts PostgreSQL, creates the tables, runs the pipeline
-once immediately, then hands off to cron.
+and training jobs once immediately.
 
 **Run the pipeline manually:**
 ```bash
@@ -128,6 +131,11 @@ python src/pipeline/run_pipeline.py
 
 **Environment variables**: copy `.env.example` to `.env` and
 fill in your `DATABASE_URL`. Never commit `.env` to the repository.
+
+**Dependencies**:
+- Runtime dependencies are pinned in `requirements.txt`
+- Development/testing dependencies are pinned in `requirements-dev.txt`
+- CI checks fail if unpinned dependencies are introduced
 
 ### 1.9 Outputs of the data pipeline
 
@@ -206,7 +214,7 @@ price = exp(prediction)
 ```
 
 ## 2.4. Retraining pipeline
-To make it more similar as to how it should work in a production environment, we decided to create a pipeline that generates the model artifact instead of just creating a model once. This pipeline has a cron job just like the data extraction one, but it runs once monthly. That way we get an updated version of the model in case the data has also been updated. 
+To make it more similar to production, we implemented retraining as a standalone job that can be triggered by an external scheduler. In this repository, monthly retraining is configured in GitHub Actions (`.github/workflows/scheduled-pipeline.yml`). That way we get an updated model in case data has changed.
 
 ### Current Behavior
 - Evaluation metrics are printed
@@ -227,7 +235,7 @@ Just like with the data extraction pipeline, now we have a new command in the Do
 ```bash
 docker-compose up --build
 ```
-After the data extraction, it runs the pipeline once immediately, and then hands off to cron.
+After the data extraction, it runs the training once in local compose mode.
 
 **Run the pipeline manually:**
 ```bash
@@ -299,8 +307,8 @@ The `start.sh` script automates the entire setup process from scratch by executi
 docker-compose up --build
 ```
 This starts the API after the pipeline has run and the model is available. 
-The API loads the model on startup and begins accepting requests at http://localhost:8000. 
-Interactive documentation is available at http://localhost:8000/docs.
+The API loads the model on startup and begins accepting requests at http://localhost:8001. 
+Interactive documentation is available at http://localhost:8001/docs.
 
 **Access the dashboard through your browser, by navigating to:**
 ```

@@ -1,3 +1,5 @@
+name: parislens_v2
+
 services:
   postgres:
     image: postgres:15
@@ -6,20 +8,45 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: parislens
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data_v2:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U admin -d parislens" ]
       interval: 5s
       retries: 10
-  pipeline:
+  db_init:
     build: .
     environment:
       DATABASE_URL: postgresql://admin:password@postgres:5432/parislens
     depends_on:
       postgres:
         condition: service_healthy
+    command: ["./run_job.sh", "init-db"]
+    volumes:
+      - pipeline_logs:/app
+      - model_artifacts:/app/model_artifacts
+
+  pipeline:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://admin:password@postgres:5432/parislens
+    depends_on:
+      db_init:
+        condition: service_completed_successfully
+    command: ["./run_job.sh", "pipeline"]
+    volumes:
+      - pipeline_logs:/app
+      - model_artifacts:/app/model_artifacts
+
+  trainer:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://admin:password@postgres:5432/parislens
+    depends_on:
+      pipeline:
+        condition: service_completed_successfully
+    command: ["./run_job.sh", "train"]
     volumes:
       - pipeline_logs:/app
       - model_artifacts:/app/model_artifacts
@@ -32,11 +59,12 @@ services:
       MODEL_PATH: /app/model_artifacts/lgb_model_latest.joblib
       DATABASE_URL: postgresql://admin:password@postgres:5432/parislens
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - model_artifacts:/app/model_artifacts
     depends_on:
-      - pipeline
+      trainer:
+        condition: service_completed_successfully
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
       interval: 5s
@@ -55,7 +83,7 @@ services:
       - postgres
 
 volumes:
-  pg_data:
+  pg_data_v2:
   pipeline_logs:
   model_artifacts:
 

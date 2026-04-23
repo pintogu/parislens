@@ -93,19 +93,26 @@ if df_stats is not None and len(df_stats) > 0:
     if len(df_filtered) > 0:
         # average prime per m square by date and arrondisment
         st.subheader("Average Price per m² by Arrondissement")
-        
-        chart_price = st.line_chart()
-        pivot_price = df_filtered.pivot(index="date", columns="arrondissement", values="avg_price_per_m2")
+        pivot_price = df_filtered.pivot_table(
+            index="date", columns="arrondissement", values="avg_price_per_m2", aggfunc="mean"
+        ).sort_index()
         if len(pivot_price) > 0:
-            chart_price.line_chart(pivot_price)
+            # When only one date is available, line charts often look empty; use bars instead.
+            if len(pivot_price.index.unique()) == 1:
+                st.bar_chart(pivot_price)
+            else:
+                st.line_chart(pivot_price)
         
         # listing count
         st.subheader("Number of Listings by Arrondissement")
-        
-        chart_listings = st.line_chart()
-        pivot_listings = df_filtered.pivot(index="date", columns="arrondissement", values="listing_count")
+        pivot_listings = df_filtered.pivot_table(
+            index="date", columns="arrondissement", values="listing_count", aggfunc="sum"
+        ).sort_index()
         if len(pivot_listings) > 0:
-            chart_listings.line_chart(pivot_listings)
+            if len(pivot_listings.index.unique()) == 1:
+                st.bar_chart(pivot_listings)
+            else:
+                st.line_chart(pivot_listings)
         
         # summary statistics for date period and arronsissements selected
         st.subheader("Summary Statistics")
@@ -113,11 +120,11 @@ if df_stats is not None and len(df_stats) > 0:
         
         with col1:
             st.metric("Average Price per m²", 
-                     f"€{df_filtered[(df_filtered['date'] == df_filtered['date'].max()) & (df_stats["arrondissement"].isin(selected_arrondissements))]['avg_price_per_m2'].mean():.2f}")
+                     f"€{df_filtered[(df_filtered['date'] == df_filtered['date'].max()) & (df_filtered['arrondissement'].isin(selected_arrondissements))]['avg_price_per_m2'].mean():.2f}")
         
         with col2:
             st.metric("Total Listings", 
-                     f"{df_filtered[(df_filtered['date'] == df_filtered['date'].max()) & (df_stats["arrondissement"].isin(selected_arrondissements))]['listing_count'].sum():.0f}")
+                     f"{df_filtered[(df_filtered['date'] == df_filtered['date'].max()) & (df_filtered['arrondissement'].isin(selected_arrondissements))]['listing_count'].sum():.0f}")
     else:
         st.warning("No data available for the selected filters")
 else:
