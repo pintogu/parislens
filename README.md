@@ -84,13 +84,16 @@ without re downloading from the source.
 
 ### 1.6 Scheduling
 
-For local development, `docker-compose up --build` runs one-time jobs in sequence:
+For local development, `docker compose up --build` runs one-time jobs in sequence:
 1. schema initialization
 2. data pipeline
 3. model training
 
 The scheduler concern is kept outside the image. The same image can now run a single job (`init-db`, `pipeline`, or
 `train`) and an external scheduler decides when to trigger each one.
+
+In compose, the `job_runner` service currently runs `./run_job.sh full`, which executes `init-db`, `pipeline`, then
+`train` once.
 
 For production-like scheduling, the repository includes a GitHub Actions workflow:
 - Daily ingestion at `03:00 UTC`
@@ -119,7 +122,7 @@ all scripts in the automation process share the same format and behaviour.
 
 **Start the full stack:**
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 This starts PostgreSQL, creates the tables, runs the pipeline
 and training jobs once immediately.
@@ -165,7 +168,7 @@ monitoring and debugging.
 All tables live in the PostgreSQL instance defined in
 `docker-compose.yml`. To connect locally:
 ```bash
-psql postgresql://admin:password@localhost:5432/parislens
+psql postgresql://admin:password@localhost:5433/parislens
 ```
 
 ---
@@ -233,7 +236,7 @@ Just like with the data extraction pipeline, now we have a new command in the Do
 
 **Start the full stack:**
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 After the data extraction, it runs the training once in local compose mode.
 
@@ -296,15 +299,14 @@ Explanation of the script:
 
 The `start.sh` script automates the entire setup process from scratch by executing the following steps in order:
 1. **Environment Setup:** Automatically duplicates the `.env.example` file into `.env` to securely set up your database credentials.
-2. **Container Orchestration:** Uses `docker-compose` to download, build, and run the Postgres database, API, Pipeline, and Dashboard in the background.
-3. **Initial Scrape:** Waits for the database to boot, then forces the pipeline to scrape today's data so the dashboard isn't empty.
-4. **Launch:** Automatically opens the Streamlit frontend in your default browser.
+2. **Container Orchestration:** Uses `docker compose up --build -d` to build and run Postgres, the one-shot job runner, API, and dashboard in the background.
+3. **Launch:** Automatically opens the Streamlit frontend in your default browser.
 
 ### 4.3 Running manually 
 
 **Start the full stack:**
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 This starts the API after the pipeline has run and the model is available. 
 The API loads the model on startup and begins accepting requests at http://localhost:8001. 
