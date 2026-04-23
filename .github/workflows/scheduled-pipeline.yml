@@ -1,0 +1,72 @@
+name: Scheduled Data + Model Jobs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *" # Daily at 03:00 UTC
+    - cron: "0 4 1 * *" # Monthly on day 1 at 04:00 UTC
+
+jobs:
+  pipeline:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * *'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: parislens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U admin -d parislens"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://admin:password@localhost:5432/parislens
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Initialize schema
+        run: python src/database/init_db.py
+      - name: Run ingestion pipeline
+        run: python src/pipeline/run_pipeline.py
+
+  training:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 1 * *'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: parislens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U admin -d parislens"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://admin:password@localhost:5432/parislens
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Initialize schema
+        run: python src/database/init_db.py
+      - name: Run training job
+        run: python src/model/train_model.py

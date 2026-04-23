@@ -18,8 +18,32 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Validate pinned dependencies
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          req_files = [Path("requirements.txt"), Path("requirements-dev.txt")]
+          offenders = []
+
+          for req_file in req_files:
+              for idx, line in enumerate(req_file.read_text().splitlines(), start=1):
+                  clean = line.strip()
+                  if not clean or clean.startswith("#") or clean.startswith("-r "):
+                      continue
+                  if "==" not in clean:
+                      offenders.append(f"{req_file}:{idx}: {clean}")
+
+          if offenders:
+              print("Unpinned dependencies found:")
+              for item in offenders:
+                  print(item)
+              raise SystemExit(1)
+          print("All dependencies are pinned with ==.")
+          PY
+
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest-mock
+        run: pip install -r requirements-dev.txt
 
       - name: Run tests
         run: PYTHONPATH=. pytest tests/test_api.py -v
