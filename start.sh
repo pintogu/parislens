@@ -1,16 +1,16 @@
-#Initiates the whole infastructure , more on README.
-echo "Initiating Parislens Infastructure..."
+#!/bin/sh
+set -eu
 
-#Create an env file as long as it doesn't exist yet.
+echo "Initiating Parislens Infrastructure..."
+
+# Create .env if it doesn't exist
 if [ ! -f .env ]; then 
-    echo "Creating new env. file..."
-    cp .env.example .env  
+  echo "Creating new .env file..."
+  cp .env.example .env  
 fi 
 
-#Initiate the docker containers, instead of running the command manually
-echo "Initiating Docker containers...."
-docker-compose up --build -d 
+echo "Starting Docker containers..."
+docker compose up --build -d 
 
-#Open the dashboard;
 echo "Opening dashboard..."
-open http://localhost:8501 
+open http://localhost:8501
