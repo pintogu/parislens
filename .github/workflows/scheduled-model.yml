@@ -1,12 +1,12 @@
-name: Scheduled Data Pipeline
+name: Scheduled Model Training
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * *" # Daily at 03:00 UTC
+    - cron: "0 4 1 * *" # Monthly on day 1 at 04:00 UTC
 
 jobs:
-  pipeline:
+  training:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -34,5 +34,5 @@ jobs:
         run: pip install -r requirements.txt
       - name: Initialize schema
         run: python src/database/init_db.py
-      - name: Run ingestion pipeline
-        run: python src/pipeline/run_pipeline.py
+      - name: Run training job
+        run: python src/model/train_model.py
